@@ -1,0 +1,21 @@
+# 物理參數
+physics:
+  gravity: 100
+  elasticity: 0.95
+  friction: 0.1
+
+# 寵物參數
+pet:
+  radius: 20
+  drag_threshold_multiplier: 3  # drag_threshold = radius * 這個值
+
+# 發射參數
+launch:
+  max_charge: 1200
+  charge_rate: 800
+  base_charge: 200
+
+# 更新頻率
+timers:
+  render_ms: 16       # ~60fps
+  wall_update_ms: 2000

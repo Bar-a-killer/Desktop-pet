@@ -1,4 +1,5 @@
 import pymunk
+from window_detector import Rect
 
 
 class WallManager:
@@ -7,12 +8,11 @@ class WallManager:
         self._dynamic_walls: list[pymunk.Segment] = []
 
     def add_screen_walls(self, w: int, h: int) -> None:
-        """螢幕四邊永久牆壁"""
         edges = [
-            [(0, h), (w, h)],  # 下
-            [(0, 0), (0, h)],  # 左
-            [(w, 0), (w, h)],  # 右
-            [(0, 0), (w, 0)],  # 上
+            [(0, h), (w, h)],
+            [(0, 0), (0, h)],
+            [(w, 0), (w, h)],
+            [(0, 0), (w, 0)],
         ]
         for a, b in edges:
             seg = pymunk.Segment(self.space.static_body, a, b, 2)
@@ -21,28 +21,41 @@ class WallManager:
             self.space.add(seg)
 
     def clear_dynamic_walls(self) -> None:
-        """清除所有視窗牆壁"""
         for seg in self._dynamic_walls:
             self.space.remove(seg)
         self._dynamic_walls.clear()
 
-    def add_window_wall(self, x: int, y: int, w: int, h: int) -> None:
-        """為單一視窗加入四邊牆壁"""
-        corners = [
-            [(x,     y),     (x + w, y)    ],  # 上
-            [(x + w, y),     (x + w, y + h)],  # 右
-            [(x + w, y + h), (x,     y + h)],  # 下
-            [(x,     y + h), (x,     y)    ],  # 左
+    def _add_rect_wall(self, rect: Rect, elasticity: float = 0.6) -> None:
+        x, y, w, h = rect.x, rect.y, rect.w, rect.h
+        edges = [
+            [(x,     y),     (x + w, y)    ],
+            [(x + w, y),     (x + w, y + h)],
+            [(x + w, y + h), (x,     y + h)],
+            [(x,     y + h), (x,     y)    ],
         ]
-        for a, b in corners:
+        for a, b in edges:
             seg = pymunk.Segment(self.space.static_body, a, b, 2)
-            seg.elasticity = 0.6
+            seg.elasticity = elasticity
             seg.friction = 0.5
             self._dynamic_walls.append(seg)
             self.space.add(seg)
 
-    def rebuild_window_walls(self, windows: list[tuple[int, int, int, int]]) -> None:
-        """重建所有視窗牆壁"""
+    def add_taskbar_wall(self, rect: Rect) -> None:
+        """工作欄牆壁（永久，不會被 rebuild 清除）"""
+        x, y, w, h = rect.x, rect.y, rect.w, rect.h
+        edges = [
+            [(x,     y),     (x + w, y)    ],
+            [(x + w, y),     (x + w, y + h)],
+            [(x + w, y + h), (x,     y + h)],
+            [(x,     y + h), (x,     y)    ],
+        ]
+        for a, b in edges:
+            seg = pymunk.Segment(self.space.static_body, a, b, 2)
+            seg.elasticity = 0.8
+            seg.friction = 0.1
+            self.space.add(seg)
+
+    def rebuild_window_walls(self, rects: list[Rect]) -> None:
         self.clear_dynamic_walls()
-        for (x, y, w, h) in windows:
-            self.add_window_wall(x, y, w, h)
+        for rect in rects:
+            self._add_rect_wall(rect)
