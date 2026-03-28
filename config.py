@@ -1,15 +1,12 @@
 import yaml
 from pathlib import Path
+from functools import lru_cache
 
-_cfg = None
-
+@lru_cache(maxsize=1)
 def get() -> dict:
-    global _cfg
-    if _cfg is None:
-        path = Path(__file__).parent / "config.yaml"
-        with open(path, "r") as f:
-            _cfg = yaml.safe_load(f)
-    return _cfg
+    path = Path(__file__).parent / "config.yaml"
+    with open(path, "r") as f:
+        return yaml.safe_load(f)
 
 def physics() -> dict:
     return get()["physics"]

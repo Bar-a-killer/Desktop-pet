@@ -1,6 +1,6 @@
 # 物理參數
 physics:
-  gravity: 100
+  gravity: 400
   elasticity: 0.95
   friction: 0.1
 

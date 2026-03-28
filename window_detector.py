@@ -1,5 +1,6 @@
 import platform
 from dataclasses import dataclass
+from logger import print_log
 
 
 @dataclass
@@ -21,12 +22,12 @@ class WindowDetector:
                 import ewmh as ewmh_mod
                 self._ewmh = ewmh_mod.EWMH()
             except Exception as e:
-                print(f"[WindowDetector] ewmh 初始化失敗: {e}")
+                print_log(f"[WindowDetector] ewmh 初始化失敗: {e}")
             try:
                 from Xlib import display
                 self._xdisplay = display.Display()
             except Exception as e:
-                print(f"[WindowDetector] Xlib 初始化失敗: {e}")
+                print_log(f"[WindowDetector] Xlib 初始化失敗: {e}")
 
     def get_taskbar(self) -> Rect | None:
         if self.system == "Linux":
@@ -68,7 +69,7 @@ class WindowDetector:
                 return Rect(wa_x + wa_w, 0, screen_w - (wa_x + wa_w), screen_h)
             return None
         except Exception as e:
-            print(f"[WindowDetector] 工作欄偵測失敗: {e}")
+            print_log(f"[WindowDetector] 工作欄偵測失敗: {e}")
             return None
 
     def _get_windows_linux(self, own_title: str) -> list[Rect]:
@@ -76,8 +77,20 @@ class WindowDetector:
             return []
         try:
             result = []
-            for win in self._ewmh.getClientList():
+            client_list = self._ewmh.getClientList()
+            if not client_list:
+                return result
+                
+            for win in client_list[:50]:  # 限制處理視窗數量，避免過度負載
                 try:
+                    # 快速檢查視窗是否仍然有效
+                    try:
+                        geom = win.get_geometry()
+                        if geom.width < 10 or geom.height < 10:
+                            continue
+                    except:
+                        continue  # 視窗無效，跳過
+                    
                     title = self._ewmh.getWmName(win) or ""
                     if isinstance(title, bytes):
                         title = title.decode("utf-8", errors="ignore")
@@ -106,18 +119,19 @@ class WindowDetector:
                     if not any(t in wall_types for t in win_type):
                         continue
 
-                    geom = win.get_geometry()
                     translated = win.translate_coords(geom.root, 0, 0)
                     x, y = translated.x, translated.y
                     w, h = geom.width, geom.height
 
                     if w > 10 and h > 10:
                         result.append(Rect(x, y, w, h))
-                except Exception:
+                except Exception as e:
+                    # 打印失败详情便于调试
+                    print_log(f"[WindowDetector] 单个窗口检测失败: {e}")
                     continue
             return result
         except Exception as e:
-            print(f"[WindowDetector] Linux 視窗偵測失敗: {e}")
+            print_log(f"[WindowDetector] Linux 視窗偵測失敗: {e}")
             return []
 
     def _get_taskbar_win(self) -> Rect | None:
@@ -131,13 +145,23 @@ class WindowDetector:
             ctypes.windll.user32.SystemParametersInfoW(SPI_GETWORKAREA, 0, ctypes.byref(wa), 0)
             sm_w = ctypes.windll.user32.GetSystemMetrics(0)
             sm_h = ctypes.windll.user32.GetSystemMetrics(1)
+            
+            # 支持四个方向的任务栏
             if wa.bottom < sm_h:
+                # 下方任务栏
                 return Rect(0, wa.bottom, sm_w, sm_h - wa.bottom)
             elif wa.top > 0:
+                # 上方任务栏
                 return Rect(0, 0, sm_w, wa.top)
+            elif wa.left > 0:
+                # 左侧任务栏
+                return Rect(0, 0, wa.left, sm_h)
+            elif wa.right < sm_w:
+                # 右侧任务栏
+                return Rect(wa.right, 0, sm_w - wa.right, sm_h)
             return None
         except Exception as e:
-            print(f"[WindowDetector] Windows 工作欄偵測失敗: {e}")
+            print_log(f"[WindowDetector] Windows 工作欄偵測失敗: {e}")
             return None
 
     def _get_windows_win(self, own_title: str) -> list[Rect]:
@@ -152,5 +176,5 @@ class WindowDetector:
                 result.append(Rect(w.left, w.top, w.width, w.height))
             return result
         except Exception as e:
-            print(f"[WindowDetector] Windows 視窗偵測失敗: {e}")
+            print_log(f"[WindowDetector] Windows 視窗偵測失敗: {e}")
             return []

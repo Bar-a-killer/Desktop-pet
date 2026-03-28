@@ -1,5 +1,6 @@
 import pymunk
 from window_detector import Rect
+from logger import print_log
 
 
 class WallManager:
@@ -7,12 +8,15 @@ class WallManager:
         self.space = space
         self._dynamic_walls: list[pymunk.Segment] = []
 
-    def add_screen_walls(self, w: int, h: int) -> None:
+    def add_screen_walls(self, ox: int, oy: int, w: int, h: int) -> None:
+        """螢幕四邊牆壁，ox/oy 是虛擬桌面左上角座標"""
+        x0, y0 = ox, oy
+        x1, y1 = ox + w, oy + h
         edges = [
-            [(0, h), (w, h)],
-            [(0, 0), (0, h)],
-            [(w, 0), (w, h)],
-            [(0, 0), (w, 0)],
+            [(x0, y1), (x1, y1)],  # 下
+            [(x0, y0), (x0, y1)],  # 左
+            [(x1, y0), (x1, y1)],  # 右
+            [(x0, y0), (x1, y0)],  # 上
         ]
         for a, b in edges:
             seg = pymunk.Segment(self.space.static_body, a, b, 2)
@@ -56,6 +60,10 @@ class WallManager:
             self.space.add(seg)
 
     def rebuild_window_walls(self, rects: list[Rect]) -> None:
+        """重建动态墙壁（窗口墙壁），任务栏墙壁保留"""
         self.clear_dynamic_walls()
-        for rect in rects:
-            self._add_rect_wall(rect)
+        if rects:
+            print_log(f"[牆壁] 重建 {len(rects)} 個窗口牆")
+            for rect in rects:
+                print_log(f"  窗口: Rect({rect.x},{rect.y},{rect.w},{rect.h})")
+                self._add_rect_wall(rect)

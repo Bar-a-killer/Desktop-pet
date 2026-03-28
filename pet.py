@@ -2,6 +2,7 @@ import sys
 import time
 import platform
 import pymunk
+from threading import Lock
 
 from PyQt6.QtWidgets import QApplication, QWidget
 from PyQt6.QtCore import Qt, QTimer
@@ -11,16 +12,7 @@ import config
 from physics import WallManager
 from window_detector import WindowDetector
 from input_handler import InputHandler
-
-# ── 常數 ──────────────────────────────────────────────
-GRAVITY          = 500
-ELASTICITY       = 0.95
-FRICTION         = 0.1
-PET_RADIUS       = 20
-DRAG_THRESHOLD   = PET_RADIUS * 3   # 拖曳觸發範圍（px）
-MAX_CHARGE       = 1200             # 最大發射速度
-CHARGE_RATE      = 800              # 每秒蓄力速度
-WALL_UPDATE_MS   = 2000             # 視窗牆壁更新間隔
+from logger import print_log
 
 
 class Pet(QWidget):
@@ -35,7 +27,8 @@ class Pet(QWidget):
         if platform.system() == "Linux":
             self._set_click_through_linux()
 
-    # ── 初始化 ────────────────────────────────────────
+    # ── 設定載入 ──────────────────────────────────────
+
     def _load_config(self) -> None:
         p  = config.physics()
         pt = config.pet()
@@ -52,32 +45,43 @@ class Pet(QWidget):
         self.RENDER_MS      = tm["render_ms"]
         self.WALL_MS        = tm["wall_update_ms"]
 
+    # ── 初始化 ────────────────────────────────────────
+
     def _setup_window(self) -> None:
         self.setWindowFlags(
             Qt.WindowType.FramelessWindowHint |
-            Qt.WindowType.WindowStaysOnTopHint |
-            Qt.WindowType.Tool
+            Qt.WindowType.WindowStaysOnTopHint
         )
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
 
-        # 取得虛擬桌面完整範圍
-        virtual = QApplication.primaryScreen().virtualGeometry()
-        primary = QApplication.primaryScreen().geometry()
+        # 虛擬桌面完整範圍（所有螢幕的聯集）
+        # 不能信任 virtualGeometry()，需要手動計算所有螢幕的邊界
+        screens = QApplication.screens()
+        if not screens:
+            raise RuntimeError("No screens found!")
+        
+        print_log(f"[窗口] 檢測到 {len(screens)} 個屏幕")
+        for i, s in enumerate(screens):
+            geom = s.geometry()
+            print_log(f"  屏幕{i}: x={geom.x()} y={geom.y()} w={geom.width()} h={geom.height()}")
+        
+        # 手動設定虛擬桌面範圍以匹配 Qt 座標系
+        self.virt_x = 0
+        self.virt_y = 0
+        self.screen_w = 3840
+        self.screen_h = 1080
 
-        self.screen_w = virtual.width()
-        self.screen_h = virtual.height()
+        self.resize(self.screen_w, self.screen_h)
+        self.move(self.virt_x, self.virt_y)
 
-        # 視窗從虛擬桌面左上角開始（可能是負座標）
-        self.win_offset_x = virtual.x() - primary.x()
-        self.win_offset_y = virtual.y() - primary.y()
+        # 計算窗口全局座標偏移（pynput使用全局座標，需要轉換為虛擬座標）
+        # pynput返回全局座標，虛擬座標 = 全局座標 - window_global_offset
+        # 初始假設為匹配 Qt 座標
+        self.window_global_x = 0
+        self.window_global_y = 0
 
-        self.setGeometry(
-            self.win_offset_x, self.win_offset_y,
-            self.screen_w, self.screen_h
-        )
-
-        print(f"virtual: {virtual}  primary: {primary}")
-        print(f"視窗偏移: ({self.win_offset_x}, {self.win_offset_y})")
+        print_log(f"虛擬桌面: 左上({self.virt_x},{self.virt_y}) 大小{self.screen_w}x{self.screen_h} 右下({self.virt_x + self.screen_w},{self.virt_y + self.screen_h})")
+        print_log(f"窗口全局偏移初始值: ({self.window_global_x}, {self.window_global_y})")
 
     def _set_click_through_linux(self) -> None:
         try:
@@ -86,30 +90,25 @@ class Pet(QWidget):
             from Xlib.ext import shape
 
             wid = int(self.winId())
-
-            # 置頂 + notification 類型
-            subprocess.run(["xprop", "-id", str(wid),
-                "-f", "_NET_WM_WINDOW_TYPE", "32a",
-                "-set", "_NET_WM_WINDOW_TYPE", "_NET_WM_WINDOW_TYPE_NOTIFICATION"])
+            # subprocess.run(["xprop", "-id", str(wid),
+            #     "-f", "_NET_WM_WINDOW_TYPE", "32a",
+            #     "-set", "_NET_WM_WINDOW_TYPE", "_NET_WM_WINDOW_TYPE_NOTIFICATION"],
+            #     capture_output=True)
             subprocess.run(["xprop", "-id", str(wid),
                 "-f", "_NET_WM_STATE", "32a",
-                "-set", "_NET_WM_STATE", "_NET_WM_STATE_ABOVE"])
+                "-set", "_NET_WM_STATE", "_NET_WM_STATE_ABOVE"],
+                capture_output=True)
 
-            # click-through：Input shape 設成空矩形
             d = display.Display()
             win = d.create_resource_object("window", wid)
             shape.rectangles(
-                win,           # self
-                shape.SO.Set,  # operation
-                shape.SK.Input, # destination_kind
-                X.Unsorted,    # ordering
-                0, 0,          # x_offset, y_offset
-                []             # rectangles
+                win, shape.SO.Set, shape.SK.Input,
+                X.Unsorted, 0, 0, []
             )
             d.flush()
-            print("[Pet] click-through + 置頂 設定成功")
+            print_log("[Pet] click-through + 置頂 設定成功")
         except Exception as e:
-            print(f"[Pet] 設定失敗: {e}")
+            print_log(f"[Pet] 設定失敗: {e}")
 
     def _setup_physics(self) -> None:
         self.space = pymunk.Space()
@@ -117,37 +116,41 @@ class Pet(QWidget):
 
         moment = pymunk.moment_for_circle(1, 0, self.PET_RADIUS)
         self.body = pymunk.Body(1, moment)
-        #self.body.position = (self.screen_w // 4, 100)
-        #self.body.position = (960, 100)  # 左螢幕中間
-        self.body.position = (480, 100)
-        #self.body.position = (2880, 100)
+        # 初始位置：屏幕中央
+        init_x = self.virt_x + self.screen_w // 2
+        init_y = self.virt_y + 100
+        self.body.position = (init_x, init_y)
+
         self.shape = pymunk.Circle(self.body, self.PET_RADIUS)
         self.shape.elasticity = self.ELASTICITY
         self.shape.friction = self.FRICTION
         self.space.add(self.body, self.shape)
 
+        # 牆壁用虛擬座標
         self.wall_mgr = WallManager(self.space)
-        self.wall_mgr.add_screen_walls(self.screen_w, self.screen_h)
+        self.wall_mgr.add_screen_walls(
+            self.virt_x, self.virt_y,
+            self.screen_w, self.screen_h
+        )
+        print_log(f"[物理] 屏幕牆設置: ({self.virt_x},{self.virt_y}) {self.screen_w}x{self.screen_h}")
 
         self.detector = WindowDetector()
         taskbar = self.detector.get_taskbar()
         if taskbar:
             self.wall_mgr.add_taskbar_wall(taskbar)
-            print(f"[Pet] 工作欄牆壁: {taskbar}")
+            print_log(f"[Pet] 工作欄牆壁: {taskbar}")
 
     def _setup_input(self) -> None:
-        # 狀態
         self._dragging     = False
         self._drag_offset  = (0.0, 0.0)
         self._charging     = False
         self._charge_start = 0.0
         self._charge       = 0.0
         self._mouse_pos    = (0, 0)
-        primary_geo = QApplication.primaryScreen().geometry()
-        self._screen_offset_x = 0
-        self._screen_offset_y = 0
-        print(f"座標偏移: ({self._screen_offset_x}, {self._screen_offset_y})")
+        self._state_lock   = Lock()  # 保护线程安全
         
+        # 第一次鼠標事件時校準座標
+        self._calibrated = False
 
         self.input_handler = InputHandler()
         self.input_handler.on_mouse_press   = self._on_mouse_press
@@ -156,6 +159,8 @@ class Pet(QWidget):
         self.input_handler.start()
 
     def _setup_timers(self) -> None:
+        self._update_start_time = time.time()  # 统一计时源
+        
         self._render_timer = QTimer()
         self._render_timer.timeout.connect(self._update)
         self._render_timer.start(self.RENDER_MS)
@@ -167,85 +172,123 @@ class Pet(QWidget):
     # ── 更新 ──────────────────────────────────────────
 
     def _update(self) -> None:
-        if self._charging:
-            elapsed = time.time() - self._charge_start
-            self._charge = min(elapsed * self.CHARGE_RATE, self.MAX_CHARGE)
+        with self._state_lock:
+            if self._charging:
+                elapsed = time.time() - self._charge_start
+                self._charge = min(elapsed * self.CHARGE_RATE, self.MAX_CHARGE)
 
-        if not self._dragging:
-            self.space.step(1 / 60)
+            if not self._dragging:
+                self.space.step(1 / 60)
 
-        self.update()  # 觸發 paintEvent
+        self.update()
 
     def _update_walls(self) -> None:
-        windows = self.detector.get_windows()
-        self.wall_mgr.rebuild_window_walls(windows)
-    # ── 座標轉換 ──────────────────────────────────────
- 
-    def _to_physics(self, x: int, y: int) -> tuple[float, float]:
-        return (
-            x - self._screen_offset_x,
-            y - self._screen_offset_y,
-        )
-    # ── 輸入事件 ──────────────────────────────────────
+        try:
+            windows = self.detector.get_windows()
+            self.wall_mgr.rebuild_window_walls(windows)
+        except Exception as e:
+            print_log(f"[Pet] 牆壁更新失敗，跳過此次更新: {e}")
+            # 不重新建牆壁，保持現有牆壁
+
+    # ── 輸入事件（pynput回報全局座標，需轉換為虛擬座標）────
+
+    def _convert_mouse_coords(self, x: int, y: int) -> tuple[int, int]:
+        """
+        將pynput全局座標轉換為虛擬座標
+        pynput使用X11坐標系 (-1920, 1920)
+        Qt使用 (0, 3840)
+        需要先轉換為Qt坐標，再減去窗口偏移
+        """
+        # 將pynput X11坐標轉換為Qt坐標
+        qt_x = x + 1920  # X11 left monitor starts at -1920
+        qt_y = y
+        
+        # 虛擬座標 = Qt座標 - 窗口全局偏移
+        vx = qt_x - self.window_global_x
+        vy = qt_y - self.window_global_y
+        
+        return (vx, vy)
 
     def _on_mouse_press(self, x: int, y: int) -> None:
-        px, py = self._to_physics(x, y)
-        bx, by = self.body.position
-        dist = ((px - bx) ** 2 + (py - by) ** 2) ** 0.5
-        print(f"按下 pynput:({x},{y}) 物理:({px:.0f},{py:.0f}) 球:({bx:.0f},{by:.0f}) 距離:{dist:.0f} 閾值:{self.DRAG_THRESHOLD}")
-        if dist < self.DRAG_THRESHOLD:
-            self._dragging = True
-            self._drag_offset = (px - bx, py - by)
-            self.body.velocity = (0, 0)
-            self.shape.filter = pymunk.ShapeFilter(mask=0)  # 穿透牆壁
-        else:
-            self._charging = True
-            self._charge_start = time.time()
-            self._charge = self.BASE_CHARGE
+        with self._state_lock:
+            # 第一次點擊時校準座標（根據球的已知位置和鼠標點擊推算偏移）
+            if not self._calibrated:
+                bx, by = self.body.position
+                # pynput給的是X11坐標 (-1920到1920)
+                # 轉換為Qt坐標後，計算window_global_x偏移
+                # window_global_x = qt_x - vx = (x + 1920) - (bx)  
+                self.window_global_x = (x + 1920) - int(bx)
+                self.window_global_y = y - int(by)
+                self._calibrated = True
+                print_log(f"[校準] 窗口全局偏移: ({self.window_global_x}, {self.window_global_y}) (pynput x={x})")
+            
+            # 轉換座標
+            vx, vy = self._convert_mouse_coords(x, y)
+            bx, by = self.body.position
+            dist = ((vx - bx) ** 2 + (vy - by) ** 2) ** 0.5
+            print_log(f"按下 pynput({x},{y}) -> Qt({x+1920},{y}) -> 虛擬({vx},{vy}) 球:({bx:.0f},{by:.0f}) 距離:{dist:.0f}")
+
+            if dist < self.DRAG_THRESHOLD:
+                self._dragging = True
+                self._drag_offset = (vx - bx, vy - by)
+                self.body.velocity = (0, 0)
+                self.shape.filter = pymunk.ShapeFilter(mask=0)
+            else:
+                self._charging = True
+                self._charge_start = time.time()
+                self._charge = self.BASE_CHARGE
 
     def _on_mouse_release(self, x: int, y: int) -> None:
-        bx, by = self.body.position
-        px, py = self._to_physics(x, y)
-        print(f"滑鼠原始: ({x}, {y})  物理座標: ({px:.0f}, {py:.0f})  球: ({bx:.0f}, {by:.0f})")
-
-        if self._dragging:
-            self._dragging = False
-            self.shape.filter = pymunk.ShapeFilter()  # 恢復碰撞
-
-        elif self._charging:
-            self._charging = False
-            bx, by = self.body.position
-            dx = px - bx
-            dy = py - by
-            length = (dx ** 2 + dy ** 2) ** 0.5
-            print(f"方向: ({dx:.0f}, {dy:.0f})  長度: {length:.0f}  力道: {self._charge:.0f}")
-        
-            if length > 0:
-                self.body.velocity = (
-                    dx / length * self._charge,
-                    dy / length * self._charge,
-                )
-            self._charge = 0.0
+        with self._state_lock:
+            if self._dragging:
+                self._dragging = False
+                self.shape.filter = pymunk.ShapeFilter()
+            elif self._charging:
+                self._charging = False
+                # 轉換座標
+                vx, vy = self._convert_mouse_coords(x, y)
+                bx, by = self.body.position
+                dx = vx - bx
+                dy = vy - by
+                length = (dx ** 2 + dy ** 2) ** 0.5
+                if length > 0:
+                    self.body.velocity = (
+                        dx / length * self._charge,
+                        dy / length * self._charge,
+                    )
+                self._charge = 0.0
 
     def _on_mouse_move(self, x: int, y: int) -> None:
-        px, py = self._to_physics(x, y)
-        self._mouse_pos = (x, y)
-        if self._dragging:
-            self.body.position = (
-                px - self._drag_offset[0],
-                py - self._drag_offset[1],
-            )
+        with self._state_lock:
+            self._mouse_pos = (x, y)
+            if self._dragging:
+                # 转换座标
+                vx, vy = self._convert_mouse_coords(x, y)
+                
+                # 计算新位置
+                new_x = vx - self._drag_offset[0]
+                new_y = vy - self._drag_offset[1]
+                
+                # 移除边界限制，让物理引擎的墙壁来约束
+                self.body.position = (new_x, new_y)
+                
+                # 诊断：如果拖到左屏幕，打印座标
+                if new_x < 100:  # 接近左屏幕
+                    print_log(f"[拖動] 拖到左屏: 全局({x},{y}) -> 虛擬({vx},{vy}) -> 物理({new_x:.1f},{new_y:.1f})")
+                print_log(f"[拖動] 位置更新: 物理({new_x:.1f},{new_y:.1f})")
 
-    # ── 繪製 ──────────────────────────────────────────
+    # ── 繪製（物理座標 → 視窗內部座標）──────────────
 
     def paintEvent(self, event) -> None:
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
 
         x, y = self.body.position
-        # 修正繪製座標（物理座標 → 視窗座標）
-        draw_x = x
-        draw_y = y
+
+        draw_x = x - self.virt_x
+        draw_y = y - self.virt_y
+
+        print_log(f"[繪製] 球位置: 物理({x:.1f},{y:.1f}) 繪製({draw_x:.1f},{draw_y:.1f}) 窗口大小{self.screen_w}x{self.screen_h}")
 
         t = self._charge / self.MAX_CHARGE
         r = int(100 + 155 * t)
@@ -254,6 +297,7 @@ class Pet(QWidget):
 
         painter.setBrush(QBrush(QColor(r, g, b, 220)))
         painter.setPen(Qt.PenStyle.NoPen)
+        
         painter.drawEllipse(
             int(draw_x - self.PET_RADIUS), int(draw_y - self.PET_RADIUS),
             self.PET_RADIUS * 2, self.PET_RADIUS * 2,
