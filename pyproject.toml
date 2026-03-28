@@ -1,0 +1,13 @@
+[project]
+name = "desktop-pet"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "ewmh>=0.1.6",
+    "pymunk>=7.2.0",
+    "pynput>=1.8.1",
+    "pyqt6>=6.10.2",
+    "python-xlib>=0.33",
+]
