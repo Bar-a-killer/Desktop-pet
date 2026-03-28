@@ -9,7 +9,6 @@ class WallManager:
         self._dynamic_walls: list[pymunk.Segment] = []
 
     def add_screen_walls(self, ox: int, oy: int, w: int, h: int) -> None:
-        """螢幕四邊牆壁，ox/oy 是虛擬桌面左上角座標"""
         x0, y0 = ox, oy
         x1, y1 = ox + w, oy + h
         edges = [
@@ -30,7 +29,9 @@ class WallManager:
         self._dynamic_walls.clear()
 
     def _add_rect_wall(self, rect: Rect, elasticity: float = 0.6) -> None:
-        x, y, w, h = rect.x, rect.y, rect.w, rect.h
+        x = rect.x
+        y = rect.y
+        w, h = rect.w, rect.h
         edges = [
             [(x,     y),     (x + w, y)    ],
             [(x + w, y),     (x + w, y + h)],
@@ -45,8 +46,9 @@ class WallManager:
             self.space.add(seg)
 
     def add_taskbar_wall(self, rect: Rect) -> None:
-        """工作欄牆壁（永久，不會被 rebuild 清除）"""
-        x, y, w, h = rect.x, rect.y, rect.w, rect.h
+        x = rect.x
+        y = rect.y
+        w, h = rect.w, rect.h
         edges = [
             [(x,     y),     (x + w, y)    ],
             [(x + w, y),     (x + w, y + h)],
@@ -60,10 +62,9 @@ class WallManager:
             self.space.add(seg)
 
     def rebuild_window_walls(self, rects: list[Rect]) -> None:
-        """重建动态墙壁（窗口墙壁），任务栏墙壁保留"""
         self.clear_dynamic_walls()
         if rects:
-            print_log(f"[牆壁] 重建 {len(rects)} 個窗口牆")
+            #print_log(f"[牆壁] 重建 {len(rects)} 個窗口牆")
             for rect in rects:
-                print_log(f"  窗口: Rect({rect.x},{rect.y},{rect.w},{rect.h})")
+                #print_log(f"  窗口: Rect({rect.x},{rect.y},{rect.w},{rect.h})")
                 self._add_rect_wall(rect)
