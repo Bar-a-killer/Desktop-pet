@@ -1,7 +1,0 @@
-README.md
-pyproject.toml
-desktop_pet.egg-info/PKG-INFO
-desktop_pet.egg-info/SOURCES.txt
-desktop_pet.egg-info/dependency_links.txt
-desktop_pet.egg-info/requires.txt
-desktop_pet.egg-info/top_level.txt

@@ -26,9 +26,27 @@ class WindowDetector:
             try:
                 from Xlib import display
                 self._xdisplay = display.Display()
+                self._x11_offset_x, self._x11_offset_y = self._calc_x11_offset()
+                print_log(f"[WindowDetector] X11 偏移: ({self._x11_offset_x}, {self._x11_offset_y})")
             except Exception as e:
                 print_log(f"[WindowDetector] Xlib 初始化失敗: {e}")
+                self._x11_offset_x = 0
+                self._x11_offset_y = 0
+    def _calc_x11_offset(self) -> tuple[int, int]:
+        """計算 X11 座標系跟 Qt 虛擬桌面座標系的偏移"""
+        try:
+            from PyQt6.QtWidgets import QApplication
+            screens = QApplication.screens()
+            qt_min_x = min(s.geometry().x() for s in screens)
+            qt_min_y = min(s.geometry().y() for s in screens)
 
+            # X11 root 的左上角在 Qt 座標系的位置
+            root = self._xdisplay.screen().root
+            geom = root.get_geometry()
+            # X11 的 (0,0) 對應到 Qt 的 (qt_min_x, qt_min_y)
+            return qt_min_x, qt_min_y
+        except Exception:
+            return 0, 0
     def get_taskbar(self) -> Rect | None:
         if self.system == "Linux":
             return self._get_taskbar_linux()
@@ -60,13 +78,15 @@ class WindowDetector:
             wa_h  = workarea[3]
 
             if wa_y > 0:
-                return Rect(0, 0, screen_w, wa_y)
+                return Rect(self._x11_offset_x, self._x11_offset_y, screen_w, wa_y)
             elif wa_y + wa_h < screen_h:
-                return Rect(0, wa_y + wa_h, screen_w, screen_h - (wa_y + wa_h))
+                return Rect(self._x11_offset_x, self._x11_offset_y + wa_y + wa_h, 
+                            screen_w, screen_h - (wa_y + wa_h))
             elif wa_x > 0:
-                return Rect(0, 0, wa_x, screen_h)
+                return Rect(self._x11_offset_x, self._x11_offset_y, wa_x, screen_h)
             elif wa_x + wa_w < screen_w:
-                return Rect(wa_x + wa_w, 0, screen_w - (wa_x + wa_w), screen_h)
+                return Rect(self._x11_offset_x + wa_x + wa_w, self._x11_offset_y,
+                            screen_w - (wa_x + wa_w), screen_h)
             return None
         except Exception as e:
             print_log(f"[WindowDetector] 工作欄偵測失敗: {e}")
@@ -99,7 +119,9 @@ class WindowDetector:
 
                     # 取得視窗類型
                     win_type = self._ewmh.getWmWindowType(win, str=True) or []
-
+                    wm_state = self._ewmh.getWmState(win, str=True) or []
+                    if "_NET_WM_STATE_HIDDEN" in wm_state:
+                        continue
                     # 跳過桌面本身
                     skip_types = [
                         "_NET_WM_WINDOW_TYPE_DESKTOP",
@@ -112,19 +134,67 @@ class WindowDetector:
                     wall_types = [
                         "_NET_WM_WINDOW_TYPE_NORMAL",
                         "_NET_WM_WINDOW_TYPE_DIALOG",
-                        "_NET_WM_WINDOW_TYPE_DOCK",      # panel
+                        "_NET_WM_WINDOW_TYPE_DOCK",
                         "_NET_WM_WINDOW_TYPE_TOOLBAR",
                         "_NET_WM_WINDOW_TYPE_UTILITY",
+                        "_NET_WM_WINDOW_TYPE_POPUP",
+                        "_NET_WM_WINDOW_TYPE_POPUP_MENU",
+                        "_NET_WM_WINDOW_TYPE_APPLET",
                     ]
-                    if not any(t in wall_types for t in win_type):
+                    if win_type and not any(t in wall_types for t in win_type):
                         continue
 
-                    translated = win.translate_coords(geom.root, 0, 0)
-                    x, y = translated.x, translated.y
-                    w, h = geom.width, geom.height
+                    try:
+                        import subprocess
+                        proc = subprocess.run(
+                            ["xdotool", "getwindowgeometry", "--shell", str(win.id)],
+                            capture_output=True, text=True, timeout=0.1
+                        )
+                        geo_vars = {}
+                        for line in proc.stdout.strip().split('\n'):
+                            if '=' in line:
+                                k, v = line.split('=', 1)
+                                geo_vars[k] = int(v)
+                        x = geo_vars.get('X', 0)
+                        y = geo_vars.get('Y', 0)
+                        w = geo_vars.get('WIDTH', geom.width)
+                        h = geo_vars.get('HEIGHT', geom.height)
+                    except Exception:
+                        translated = win.translate_coords(geom.root, 0, 0)
+                        x = translated.x
+                        y = translated.y
+                        w, h = geom.width, geom.height
 
-                    if w > 10 and h > 10:
+                    # 嘗試獲取框架裝飾信息
+                    decoration_margin = 0
+                    try:
+                        if self._xdisplay:
+                            win_xlib = self._xdisplay.create_resource_object("window", win.id)
+                            extents_atom = self._xdisplay.get_atom("_NET_FRAME_EXTENTS")
+                            extents = win_xlib.get_property(extents_atom, 0, 0, 4)
+                            if extents and extents.value:
+                                values = list(extents.value)
+                                if len(values) == 4:
+                                    left, right, top, bottom = map(int, values)
+                                    print_log(f"[WindowDetector] 窗口 '{title[:20]}' 裝飾: 左{left} 右{right} 上{top} 下{bottom}")
+                                    x -= left
+                                    y -= top
+                                    w += left + right
+                                    h += top + bottom
+                                    decoration_margin = 0  # 已使用實際裝飾
+                    except:
+                        pass
+
+                    if decoration_margin > 0:
+                        # 如果沒有獲取到裝飾信息，使用經驗值
+                        x -= decoration_margin
+                        y -= decoration_margin
+                        w += decoration_margin * 2
+                        h += decoration_margin * 2
+
+                    if w > 10 and h > 10 and x >= -5000 and y >= -5000 and x < 5000 and y < 5000:
                         result.append(Rect(x, y, w, h))
+                        print_log(f"[WindowDetector] 添加窗口: ({x},{y}) {w}x{h} '{title[:15]}'")
                 except Exception as e:
                     # 打印失败详情便于调试
                     print_log(f"[WindowDetector] 单个窗口检测失败: {e}")

@@ -7,6 +7,7 @@ class WallManager:
     def __init__(self, space: pymunk.Space):
         self.space = space
         self._dynamic_walls: list[pymunk.Segment] = []
+        self._screen_walls: list[pymunk.Segment] = []
 
     def add_screen_walls(self, ox: int, oy: int, w: int, h: int) -> None:
         x0, y0 = ox, oy
@@ -21,7 +22,14 @@ class WallManager:
             seg = pymunk.Segment(self.space.static_body, a, b, 2)
             seg.elasticity = 0.8
             seg.friction = 0.1
+            self._screen_walls.append(seg)
             self.space.add(seg)
+        print_log(f"[牆壁] 添加屏幕邊界: ({x0},{y0}) - ({x1},{y1})")
+
+    def clear_screen_walls(self) -> None:
+        for seg in self._screen_walls:
+            self.space.remove(seg)
+        self._screen_walls.clear()
 
     def clear_dynamic_walls(self) -> None:
         for seg in self._dynamic_walls:
@@ -61,10 +69,15 @@ class WallManager:
             seg.friction = 0.1
             self.space.add(seg)
 
+    def get_all_walls(self) -> list[pymunk.Segment]:
+        """獲取所有牆壁段（屏幕邊界 + 動態窗口）"""
+        return self._screen_walls + self._dynamic_walls
+
     def rebuild_window_walls(self, rects: list[Rect]) -> None:
+        """重建動態窗口牆壁"""
         self.clear_dynamic_walls()
         if rects:
-            #print_log(f"[牆壁] 重建 {len(rects)} 個窗口牆")
+            print_log(f"[牆壁] 重建 {len(rects)} 個窗口牆")
             for rect in rects:
-                #print_log(f"  窗口: Rect({rect.x},{rect.y},{rect.w},{rect.h})")
+                print_log(f"  窗口: Rect({rect.x},{rect.y},{rect.w},{rect.h})")
                 self._add_rect_wall(rect)

@@ -1,6 +1,6 @@
 # 物理參數
 physics:
-  gravity: 600
+  gravity: 800
   elasticity: 0.95
   friction: 0.1
 
@@ -8,14 +8,16 @@ physics:
 pet:
   radius: 20
   drag_threshold_multiplier: 3  # drag_threshold = radius * 這個值
+  drag_momentum_multiplier: 0.2  # 拖動速度乘數 (0.5-2.0)，越大飛彈越快
 
 # 發射參數
 launch:
-  max_charge: 1200
-  charge_rate: 1000
+  max_charge: 4000
+  charge_rate: 2200
   base_charge: 300
 
 # 更新頻率
 timers:
-  render_ms: 16       # ~60fps
+  render_ms: 8        # 渲染幀率 (8ms = 125fps, 16ms = 60fps)
+  physics_fps: 120     # 物理模擬幀率 (獨立於渲染)
   wall_update_ms: 2000
