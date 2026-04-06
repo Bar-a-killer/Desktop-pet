@@ -77,7 +77,7 @@ class WallManager:
         """重建動態窗口牆壁"""
         self.clear_dynamic_walls()
         if rects:
-            print_log(f"[牆壁] 重建 {len(rects)} 個窗口牆")
+            #print_log(f"[牆壁] 重建 {len(rects)} 個窗口牆")
             for rect in rects:
-                print_log(f"  窗口: Rect({rect.x},{rect.y},{rect.w},{rect.h})")
+                #print_log(f"  窗口: Rect({rect.x},{rect.y},{rect.w},{rect.h})")
                 self._add_rect_wall(rect)

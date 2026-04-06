@@ -176,7 +176,7 @@ class WindowDetector:
                                 values = list(extents.value)
                                 if len(values) == 4:
                                     left, right, top, bottom = map(int, values)
-                                    print_log(f"[WindowDetector] 窗口 '{title[:20]}' 裝飾: 左{left} 右{right} 上{top} 下{bottom}")
+                                    #print_log(f"[WindowDetector] 窗口 '{title[:20]}' 裝飾: 左{left} 右{right} 上{top} 下{bottom}")
                                     x -= left
                                     y -= top
                                     w += left + right
@@ -185,16 +185,16 @@ class WindowDetector:
                     except:
                         pass
 
-                    if decoration_margin > 0:
-                        # 如果沒有獲取到裝飾信息，使用經驗值
-                        x -= decoration_margin
-                        y -= decoration_margin
-                        w += decoration_margin * 2
-                        h += decoration_margin * 2
+                    # if decoration_margin > 0:
+                    #     # 如果沒有獲取到裝飾信息，使用經驗值
+                    #     x -= decoration_margin
+                    #     y -= decoration_margin
+                    #     w += decoration_margin * 2
+                    #     h += decoration_margin * 2
 
                     if w > 10 and h > 10 and x >= -5000 and y >= -5000 and x < 5000 and y < 5000:
                         result.append(Rect(x, y, w, h))
-                        print_log(f"[WindowDetector] 添加窗口: ({x},{y}) {w}x{h} '{title[:15]}'")
+                        #print_log(f"[WindowDetector] 添加窗口: ({x},{y}) {w}x{h} '{title[:15]}'")
                 except Exception as e:
                     # 打印失败详情便于调试
                     print_log(f"[WindowDetector] 单个窗口检测失败: {e}")

@@ -150,14 +150,14 @@ class ScreenWindow(QWidget):
         screen_b_y = b[1] - self.sy
 
         # 只繪製在屏幕範圍內的牆壁 (擴大範圍以顯示跨越邊界的牆壁)
-        if (min(screen_a_x, screen_b_x) <= self.sw + 500 and
-            max(screen_a_x, screen_b_x) >= -500 and
-            min(screen_a_y, screen_b_y) <= self.sh + 500 and
-            max(screen_a_y, screen_b_y) >= -500):
-            painter.drawLine(
-                int(screen_a_x), int(screen_a_y),
-                int(screen_b_x), int(screen_b_y)
-            )
+        # if (min(screen_a_x, screen_b_x) <= self.sw + 500 and
+        #     max(screen_a_x, screen_b_x) >= -500 and
+        #     min(screen_a_y, screen_b_y) <= self.sh + 500 and
+        #     max(screen_a_y, screen_b_y) >= -500):
+        #     painter.drawLine(
+        #         int(screen_a_x), int(screen_a_y),
+        #         int(screen_b_x), int(screen_b_y)
+        #     )
 
 
 class Pet:
@@ -200,9 +200,6 @@ class Pet:
         for i, s in enumerate(screens):
             g = s.geometry()
             ag = s.availableGeometry()
-            print(f"  螢幕{i}: {s.name()}")
-            print(f"    幾何: ({g.x()},{g.y()}) {g.width()}x{g.height()}")
-            print(f"    可用幾何: ({ag.x()},{ag.y()}) {ag.width()}x{ag.height()}")
 
         self.virt_x = min(s.geometry().x() for s in screens)
         self.virt_y = min(s.geometry().y() for s in screens)
@@ -213,9 +210,7 @@ class Pet:
 
         # 每個螢幕建一個視窗
         self._windows = [ScreenWindow(s, self) for s in screens]
-        print(f"[Pet] 虛擬桌面: ({self.virt_x},{self.virt_y}) {self.screen_w}x{self.screen_h}")
-        print(f"[Pet] 物理世界邊界: ({self.virt_x},{self.virt_y - 100}) - ({self.virt_x + self.screen_w},{self.virt_y + self.screen_h})")
-
+        
     # ── 物理 ──────────────────────────────────────────
 
     def _setup_physics(self) -> None:
@@ -242,14 +237,12 @@ class Pet:
                 g.x(), g.y(),
                 g.width(), g.height()
             )
-            print(f"[Pet] 螢幕邊界: ({g.x()},{g.y()}) {g.width()}x{g.height()}")
-
+            
         self.detector = WindowDetector()
         taskbar = self.detector.get_taskbar()
         if taskbar:
             self.wall_mgr.add_taskbar_wall(taskbar)
-            print(f"[Pet] 工作欄牆壁: {taskbar}")
-
+            
     # ── 輸入 ──────────────────────────────────────────
 
     def _setup_input(self) -> None:
@@ -298,10 +291,9 @@ class Pet:
             windows = self.detector.get_windows()
             self.wall_mgr.rebuild_window_walls(windows)
             # 調試信息：檢查窗口座標
-            if windows:
-                print(f"[Pet] 檢測到 {len(windows)} 個窗口:")
-                for i, w in enumerate(windows[:3]):  # 只顯示前3個
-                    print(f"  窗口{i}: ({w.x},{w.y}) {w.w}x{w.h}")
+            # if windows:
+            #     for i, w in enumerate(windows[:3]):  # 只顯示前3個
+            #         print(f"  窗口{i}: ({w.x},{w.y}) {w.w}x{w.h}")
         except Exception as e:
             print(f"[Pet] 牆壁更新失敗: {e}")
 
