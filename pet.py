@@ -1,9 +1,9 @@
 import sys
 import time
 import platform
+import ctypes
 import pymunk
 from threading import Lock
-
 from PyQt6.QtWidgets import QApplication, QWidget
 from PyQt6.QtCore import Qt, QTimer
 from PyQt6.QtGui import QPainter, QColor, QBrush, QPen
@@ -12,7 +12,6 @@ from physics import WallManager
 from window_detector import WindowDetector
 from input_handler import InputHandler
 
-
 class ScreenWindow(QWidget):
     """每個螢幕一個視窗，負責渲染球"""
 
@@ -20,11 +19,9 @@ class ScreenWindow(QWidget):
         super().__init__()
         self._pet = pet
         g = screen.geometry()
-        self.sx = g.x()
-        self.sy = g.y()
-        self.sw = g.width()
-        self.sh = g.height()
-
+        self.sx, self.sy = (g.x(), g.y())
+        self.sw, self.sh = (g.width(), g.height())
+        print(f"[ScreenWindow] 創建視窗: ({self.sx},{self.sy}) {self.sw}x{self.sh}")
         self.setWindowFlags(
             Qt.WindowType.FramelessWindowHint |
             Qt.WindowType.WindowStaysOnTopHint |
@@ -33,9 +30,13 @@ class ScreenWindow(QWidget):
         )
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
         self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
-        self.setGeometry(g)
+        self.setGeometry(
+            int(self.sx),
+            int(self.sy),
+            int(self.sw),
+            int(self.sh)
+        )
         self.show()
-
         if platform.system() == "Linux":
             self._set_click_through()
 
@@ -65,7 +66,6 @@ class ScreenWindow(QWidget):
 
     def paintEvent(self, event) -> None:
         x, y = self._pet.body.position
-
         # 球在這個螢幕範圍內才畫
         if not (self.sx - 50 <= x <= self.sx + self.sw + 50 and
                 self.sy - 50 <= y <= self.sy + self.sh + 50):
@@ -149,15 +149,15 @@ class ScreenWindow(QWidget):
         screen_b_x = b[0] - self.sx
         screen_b_y = b[1] - self.sy
 
-        # 只繪製在屏幕範圍內的牆壁 (擴大範圍以顯示跨越邊界的牆壁)
-        # if (min(screen_a_x, screen_b_x) <= self.sw + 500 and
-        #     max(screen_a_x, screen_b_x) >= -500 and
-        #     min(screen_a_y, screen_b_y) <= self.sh + 500 and
-        #     max(screen_a_y, screen_b_y) >= -500):
-        #     painter.drawLine(
-        #         int(screen_a_x), int(screen_a_y),
-        #         int(screen_b_x), int(screen_b_y)
-        #     )
+        #只繪製在屏幕範圍內的牆壁 (擴大範圍以顯示跨越邊界的牆壁)
+        if (min(screen_a_x, screen_b_x) <= self.sw + 500 and
+            max(screen_a_x, screen_b_x) >= -500 and
+            min(screen_a_y, screen_b_y) <= self.sh + 500 and
+            max(screen_a_y, screen_b_y) >= -500):
+            painter.drawLine(
+                int(screen_a_x), int(screen_a_y),
+                int(screen_b_x), int(screen_b_y)
+            )
 
 
 class Pet:
@@ -307,7 +307,7 @@ class Pet:
                 self.body.velocity = (0, 0)
                 print(f"[Pet] 初始化位置: ({x}, {y})")
                 return
-
+            print(f"[Pet] 鼠標按下: ({x}, {y})")
             bx, by = self.body.position
             dist = ((x - bx) ** 2 + (y - by) ** 2) ** 0.5
 
