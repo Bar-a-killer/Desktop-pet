@@ -77,16 +77,16 @@ class ScreenWindow(QWidget):
 
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-
-        # # 調試：繪製螢幕邊框
-        # painter.setPen(QPen(QColor(255, 0, 0, 255), 2))  # 紅色實線
-        # painter.setBrush(Qt.BrushStyle.NoBrush)
-        # painter.drawRect(0, 0, self.sw - 1, self.sh - 1)
-
-        # # 調試：顯示座標信息
-        # painter.setPen(QPen(QColor(0, 255, 0, 255), 1))
-        # painter.drawText(10, 20, f"Screen: ({self.sx},{self.sy}) {self.sw}x{self.sh}")
-        # painter.drawText(10, 40, f"Ball: ({x:.0f},{y:.0f}) -> ({draw_x:.0f},{draw_y:.0f})")
+        if(self._pet.DEBUG_SHOW_HITBOXES):
+            # 調試：繪製螢幕邊框
+            painter.setPen(QPen(QColor(255, 0, 0, 255), 2))  # 紅色實線
+            painter.setBrush(Qt.BrushStyle.NoBrush)
+            painter.drawRect(0, 0, self.sw - 1, self.sh - 1)
+        if(self._pet.DEBUG_SHOW_VELOCITY):
+            # 調試：顯示座標信息
+            painter.setPen(QPen(QColor(0, 255, 0, 255), 1))
+            painter.drawText(10, 20, f"Screen: ({self.sx},{self.sy}) {self.sw}x{self.sh}")
+            painter.drawText(10, 40, f"Ball: ({x:.0f},{y:.0f}) -> ({draw_x:.0f},{draw_y:.0f})")
 
         # 繪製牆壁
         self._draw_walls(painter)
@@ -110,21 +110,22 @@ class ScreenWindow(QWidget):
         """繪製所有牆壁"""
         walls = self._pet.wall_mgr.get_all_walls()
 
-        # 設置牆壁顏色和樣式 - 屏幕邊界用紅色，窗口牆用藍色
-        screen_walls = self._pet.wall_mgr._screen_walls
-        dynamic_walls = self._pet.wall_mgr._dynamic_walls
+        if(self._pet.DEBUG_SHOW_HITBOXES):
+            # 設置牆壁顏色和樣式 - 屏幕邊界用紅色，窗口牆用藍色
+            screen_walls = self._pet.wall_mgr._screen_walls
+            dynamic_walls = self._pet.wall_mgr._dynamic_walls
 
-        # # 繪製屏幕邊界牆（紅色實線）
-        # painter.setPen(QPen(QColor(255, 0, 0, 255), 2))  # 紅色實線
-        # painter.setBrush(Qt.BrushStyle.NoBrush)
-        # for wall in screen_walls:
-        #     self._draw_wall_segment(painter, wall)
+            # 繪製屏幕邊界牆（紅色實線）
+            painter.setPen(QPen(QColor(255, 0, 0, 255), 2))  # 紅色實線
+            painter.setBrush(Qt.BrushStyle.NoBrush)
+            for wall in screen_walls:
+                self._draw_wall_segment(painter, wall)
 
-        # # 繪製動態窗口牆（藍色虛線）
-        # painter.setPen(QPen(QColor(0, 0, 255, 255), 1, Qt.PenStyle.DashLine))  # 藍色虛線
-        # painter.setBrush(Qt.BrushStyle.NoBrush)
-        # for wall in dynamic_walls:
-        #     self._draw_wall_segment(painter, wall)
+            # 繪製動態窗口牆（藍色虛線）
+            painter.setPen(QPen(QColor(0, 0, 255, 255), 1, Qt.PenStyle.DashLine))  # 藍色虛線
+            painter.setBrush(Qt.BrushStyle.NoBrush)
+            for wall in dynamic_walls:
+                self._draw_wall_segment(painter, wall)
 
     def _draw_wall_segment(self, painter: QPainter, wall: pymunk.Segment) -> None:
         """繪製單個牆壁段"""
@@ -149,15 +150,16 @@ class ScreenWindow(QWidget):
         screen_b_x = b[0] - self.sx
         screen_b_y = b[1] - self.sy
 
-        # #只繪製在屏幕範圍內的牆壁 (擴大範圍以顯示跨越邊界的牆壁)
-        # if (min(screen_a_x, screen_b_x) <= self.sw + 500 and
-        #     max(screen_a_x, screen_b_x) >= -500 and
-        #     min(screen_a_y, screen_b_y) <= self.sh + 500 and
-        #     max(screen_a_y, screen_b_y) >= -500):
-        #     painter.drawLine(
-        #         int(screen_a_x), int(screen_a_y),
-        #         int(screen_b_x), int(screen_b_y)
-        #     )
+        if(self._pet.DEBUG_SHOW_HITBOXES):
+            #只繪製在屏幕範圍內的牆壁 (擴大範圍以顯示跨越邊界的牆壁)
+            if (min(screen_a_x, screen_b_x) <= self.sw + 500 and
+                max(screen_a_x, screen_b_x) >= -500 and
+                min(screen_a_y, screen_b_y) <= self.sh + 500 and
+                max(screen_a_y, screen_b_y) >= -500):
+                painter.drawLine(
+                    int(screen_a_x), int(screen_a_y),
+                    int(screen_b_x), int(screen_b_y)
+                )
 
 
 class Pet:
@@ -178,6 +180,11 @@ class Pet:
         pt = config.pet()
         lc = config.launch()
         tm = config.timers()
+        db = config.debug()
+        self.DEBUG_SHOW_HITBOXES = db.get("show_hitboxes", False)
+        self.DEBUG_SHOW_VELOCITY = db.get("show_velocity", False)
+        self.DEBUG_SHOW_TIMERS = db.get("show_timers", False)
+
         self.BASE_CHARGE    = lc["base_charge"]
         self.GRAVITY        = p["gravity"]
         self.ELASTICITY     = p["elasticity"]

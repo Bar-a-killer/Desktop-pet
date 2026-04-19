@@ -18,3 +18,8 @@ timers:
   render_ms: 8      
   physics_fps: 120 
   wall_update_ms: 2000
+
+debug:
+  show_hitboxes: true
+  show_velocity: false
+  show_timers: false

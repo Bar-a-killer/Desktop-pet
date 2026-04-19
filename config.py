@@ -19,3 +19,6 @@ def launch() -> dict:
 
 def timers() -> dict:
     return get()["timers"]
+
+def debug() -> dict:
+    return get()["debug"]
