@@ -128,17 +128,14 @@ class ScreenWindow(QWidget):
 
     def _draw_wall_segment(self, painter: QPainter, wall: pymunk.Segment) -> None:
         """繪製單個牆壁段"""
-        # 獲取牆壁段的兩個端點
         a = wall.a
         b = wall.b
 
-        # 檢查牆壁是否主要屬於這個螢幕 (避免在多個螢幕上重複繪製)
         wall_min_x = min(a[0], b[0])
         wall_max_x = max(a[0], b[0])
         wall_min_y = min(a[1], b[1])
         wall_max_y = max(a[1], b[1])
         
-        # 只繪製牆壁段的 x 和 y 範圍與螢幕相交的牆壁
         if not (wall_max_x >= self.sx and wall_min_x <= self.sx + self.sw and
                 wall_max_y >= self.sy and wall_min_y <= self.sy + self.sh):
             return
@@ -208,7 +205,6 @@ class Pet:
         self.screen_w = max_x - self.virt_x
         self.screen_h = max_y - self.virt_y
 
-        # 每個螢幕建一個視窗
         self._windows = [ScreenWindow(s, self) for s in screens]
         
     # ── 物理 ──────────────────────────────────────────
@@ -219,7 +215,7 @@ class Pet:
 
         moment = pymunk.moment_for_circle(1, 0, self.PET_RADIUS)
         self.body = pymunk.Body(1, moment)
-        self.body.position = (-9999, -9999)  # 螢幕外，等第一次點擊
+        self.body.position = (-9999, -9999)
 
         self.shape = pymunk.Circle(self.body, self.PET_RADIUS)
         self.shape.elasticity = self.ELASTICITY
@@ -227,12 +223,9 @@ class Pet:
         self.space.add(self.body, self.shape)
 
         self.wall_mgr = WallManager(self.space)
-        # 清除舊的螢幕邊界
         self.wall_mgr.clear_screen_walls()
-        # 為每個螢幕設置邊界牆壁 (精確的螢幕邊緣)
         for screen in self._screens:
             g = screen.geometry()
-            # 螢幕的精確邊界
             self.wall_mgr.add_screen_walls(
                 g.x(), g.y(),
                 g.width(), g.height()
@@ -248,9 +241,9 @@ class Pet:
     def _setup_input(self) -> None:
         self._dragging     = False
         self._drag_offset  = (0.0, 0.0)
-        self._drag_velocity = (0.0, 0.0)  # 拖動速度
-        self._last_drag_pos = (0.0, 0.0)  # 上次拖動位置
-        self._last_drag_time = 0.0        # 上次拖動時間
+        self._drag_velocity = (0.0, 0.0) 
+        self._last_drag_pos = (0.0, 0.0)  
+        self._last_drag_time = 0.0        
         self._charging     = False
         self._charge_start = 0.0
         self._charge       = 0.0
@@ -290,10 +283,6 @@ class Pet:
         try:
             windows = self.detector.get_windows()
             self.wall_mgr.rebuild_window_walls(windows)
-            # 調試信息：檢查窗口座標
-            # if windows:
-            #     for i, w in enumerate(windows[:3]):  # 只顯示前3個
-            #         print(f"  窗口{i}: ({w.x},{w.y}) {w.w}x{w.h}")
         except Exception as e:
             print(f"[Pet] 牆壁更新失敗: {e}")
 
